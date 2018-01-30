@@ -32,11 +32,11 @@ requestBearerToken sess (Config _ u p) = do
     [ "grant_type" := ("client_credentials"::String) ]
   let type' = res ^? responseBody . key "token_type" . _String
   case type' of
-    Just "bearer" ->
+    Just "Bearer" ->
       case res ^? responseBody . key "access_token" . _String of
         Just s  -> return $ T.unpack s
         Nothing -> fail "No bearer token!"
-    _ -> fail "Expecting bearer token."
+    _ -> fail $ "Expecting bearer token, got " ++ show type'
 
 readConfig :: IO Config
 readConfig = do
