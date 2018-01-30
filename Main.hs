@@ -38,6 +38,13 @@ requestBearerToken sess (Config _ u p) = do
         Nothing -> fail "No bearer token!"
     _ -> fail $ "Expecting bearer token, got " ++ show type'
 
+getAccounts :: S.Session -> String -> Config -> IO (Maybe Value)
+getAccounts sess token (Config uid _ _) = do
+  let opts = defaults & auth ?~ oauth2Bearer (fromString token)
+  res <- S.getWith opts sess $
+    "https://api.sbanken.no/bank/api/v1/Accounts/" ++ uid
+  return $ res ^? responseBody . key "items"
+
 readConfig :: IO Config
 readConfig = do
   home <- getEnv "HOME"
@@ -51,4 +58,5 @@ main = do
   cfg <- readConfig
   sess <- S.newSession
   token <- requestBearerToken sess cfg
-  print token
+  accs <- getAccounts sess token cfg
+  print accs
