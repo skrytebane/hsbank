@@ -21,9 +21,9 @@ import           System.Environment     (getEnv)
 import           System.FilePath        ((</>))
 
 data Config = Config
-  { customer :: Text
-  , apiKey   :: Text
-  , secret   :: Text
+  { customer :: String
+  , apiKey   :: String
+  , secret   :: String
   }
   deriving (Show, Generic)
 
@@ -31,8 +31,7 @@ instance FromJSON Config
 
 requestBearerToken :: S.Session -> Config -> IO String
 requestBearerToken sess (Config _ u p) = do
-  let opts = defaults & auth ?~ basicAuth (fromString $ T.unpack u)
-                                          (fromString $ T.unpack p)
+  let opts = defaults & auth ?~ basicAuth (fromString u) (fromString p)
   res <- S.postWith opts sess "https://api.sbanken.no/identityserver/connect/token"
     [ "grant_type" := ("client_credentials"::String) ]
   let type' = res ^? responseBody . key "token_type" . _String
@@ -74,7 +73,7 @@ getAccounts :: S.Session -> String -> Config -> IO (Maybe AccountResult)
 getAccounts sess token (Config uid _ _) = do
   let opts = defaults & auth ?~ oauth2Bearer (fromString token)
   res <- S.getWith opts sess $
-    "https://api.sbanken.no/bank/api/v1/Accounts/" ++ T.unpack uid
+    "https://api.sbanken.no/bank/api/v1/Accounts/" ++ uid
   case eitherDecode <$> res ^? responseBody of
     Just (Right parsed) ->
       return parsed
