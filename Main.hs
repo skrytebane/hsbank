@@ -92,10 +92,17 @@ readConfig = do
     Right cfg -> return cfg
 
 printBalances :: [Account] -> IO ()
-printBalances =
-  mapM_ (IO.putStrLn . toStrict . formatBalance)
+printBalances accts = do
+  printFormat header'
+  mapM_ (printFormat . formatBalance) accts
   where
-    formatBalance acct = toLazyText $
+    printFormat = IO.putStrLn . toStrict . toLazyText
+    header' =
+      right 12 ' ' ("Konto"::Text) <>
+      right 22 ' ' ("Kontonamn"::Text) <>
+      left 12 ' ' ("Disponibelt"::Text) <>
+      left 12 ' ' ("Saldo"::Text)
+    formatBalance acct =
       right 12 ' ' (accountNumber acct) <>
       right 22 ' ' (name acct) <>
       left 12 ' ' (fixed 2 $ balance acct) <>
