@@ -3,17 +3,22 @@
 
 import           Control.Lens
 import           Data.Aeson
-import           Data.Aeson.Lens      (key, _String)
-import           Data.Maybe           (maybe)
-import           Data.String          (fromString)
-import           Data.Text            (Text)
-import qualified Data.Text            as T
+import           Data.Aeson.Lens        (key, _String)
+import qualified Data.ByteString.Lazy   as LB
+import           Data.Maybe             (maybe)
+import           Data.Monoid            ((<>))
+import           Data.String            (fromString)
+import           Data.Text              (Text)
+import qualified Data.Text              as T
+import           Data.Text.Format
+import qualified Data.Text.IO           as IO
+import           Data.Text.Lazy         (toStrict)
+import           Data.Text.Lazy.Builder (toLazyText)
 import           GHC.Generics
 import           Network.Wreq
-import qualified Network.Wreq.Session as S
-import           System.Environment   (getEnv)
-import           System.FilePath      ((</>))
-import           System.IO
+import qualified Network.Wreq.Session   as S
+import           System.Environment     (getEnv)
+import           System.FilePath        ((</>))
 
 data Config = Config
   { customer :: Text
@@ -82,19 +87,20 @@ readConfig :: IO Config
 readConfig = do
   home <- getEnv "HOME"
   let path = home </> "secrets" </> "sbanken.json"
-  withFile path ReadMode $
-    \handle ->
-      do s <- hGetContents handle
-         case eitherDecode $ fromString s of
-           Left e    -> fail e
-           Right cfg -> return cfg
+  s <- LB.readFile path
+  case eitherDecode s of
+    Left e    -> fail e
+    Right cfg -> return cfg
 
 printBalances :: [Account] -> IO ()
 printBalances =
-  mapM_ printBalance
-  where printBalance (Account _ bal _ name' _ num _ _ avail) =
-          putStrLn $ T.unpack num ++ ": " ++ T.unpack name' ++
-          ": " ++ show bal ++ " (saldo: " ++ show avail ++ ")"
+  mapM_ (IO.putStrLn . toStrict . formatBalance)
+  where
+    formatBalance acct = toLazyText $
+      right 12 ' ' (accountNumber acct) <>
+      right 22 ' ' (name acct) <>
+      left 12 ' ' (fixed 2 $ balance acct) <>
+      left 12 ' ' (fixed 2 $ available acct)
 
 main :: IO ()
 main = do

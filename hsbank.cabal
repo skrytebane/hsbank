@@ -15,3 +15,5 @@ executable          hsbank
                   , aeson
                   , lens-aeson
                   , text
+                  , text-format
+                  , bytestring
