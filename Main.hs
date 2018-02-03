@@ -57,14 +57,14 @@ instance FromJSON AccountResult
 data Account = Account
   {
     ownerCustomerId :: Text
-  , balance         :: Double
+  , balance         :: Double -- saldo
   , customerId      :: Text
   , name            :: Text
   , defaultAccount  :: Bool
   , accountNumber   :: Text
   , creditLimit     :: Double
   , accountType     :: Text
-  , available       :: Double
+  , available       :: Double -- disponibelt
   } deriving (Show, Generic)
 
 instance FromJSON Account
@@ -105,8 +105,8 @@ printBalances accts = do
     formatBalance acct =
       right 12 ' ' (accountNumber acct) <>
       right 22 ' ' (name acct) <>
-      left 12 ' ' (fixed 2 $ balance acct) <>
-      left 12 ' ' (fixed 2 $ available acct)
+      left 12 ' ' (fixed 2 $ available acct) <>
+      left 12 ' ' (fixed 2 $ balance acct)
 
 main :: IO ()
 main = do
