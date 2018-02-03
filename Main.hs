@@ -14,6 +14,7 @@ import           Data.Text.Format
 import qualified Data.Text.IO           as IO
 import           Data.Text.Lazy         (toStrict)
 import           Data.Text.Lazy.Builder (toLazyText)
+import           Data.Time.Clock        (UTCTime)
 import           GHC.Generics
 import           Network.Wreq
 import qualified Network.Wreq.Session   as S
@@ -24,14 +25,16 @@ data Config = Config
   { customer :: String
   , apiKey   :: String
   , secret   :: String
+  , expires  :: UTCTime
   }
   deriving (Show, Generic)
 
 instance FromJSON Config
 
 requestBearerToken :: S.Session -> Config -> IO String
-requestBearerToken sess (Config _ u p) = do
-  let opts = defaults & auth ?~ basicAuth (fromString u) (fromString p)
+requestBearerToken sess cfg = do
+  let opts = defaults & auth ?~ basicAuth (fromString $ apiKey cfg)
+                                          (fromString $ secret cfg)
   res <- S.postWith opts sess "https://api.sbanken.no/identityserver/connect/token"
     [ "grant_type" := ("client_credentials"::String) ]
   let type' = res ^? responseBody . key "token_type" . _String
@@ -70,10 +73,10 @@ data Account = Account
 instance FromJSON Account
 
 getAccounts :: S.Session -> String -> Config -> IO (Maybe AccountResult)
-getAccounts sess token (Config uid _ _) = do
+getAccounts sess token cfg = do
   let opts = defaults & auth ?~ oauth2Bearer (fromString token)
   res <- S.getWith opts sess $
-    "https://api.sbanken.no/bank/api/v1/Accounts/" ++ uid
+    "https://api.sbanken.no/bank/api/v1/Accounts/" ++ customer cfg
   case eitherDecode <$> res ^? responseBody of
     Just (Right parsed) ->
       return parsed

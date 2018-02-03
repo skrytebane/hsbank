@@ -17,3 +17,4 @@ executable          hsbank
                   , text
                   , text-format
                   , bytestring
+                  , time
