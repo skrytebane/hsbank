@@ -18,3 +18,4 @@ executable          hsbank
                   , text-format
                   , bytestring
                   , time
+                  , uri-encode

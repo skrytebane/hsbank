@@ -5,7 +5,6 @@ import           Control.Lens
 import           Data.Aeson
 import           Data.Aeson.Lens        (key, _String)
 import qualified Data.ByteString.Lazy   as LB
-import           Data.Maybe             (maybe)
 import           Data.Monoid            ((<>))
 import           Data.String            (fromString)
 import           Data.Text              (Text)
@@ -20,6 +19,7 @@ import           Network.Wreq
 import qualified Network.Wreq.Session   as S
 import           System.Environment     (getEnv)
 import           System.FilePath        ((</>))
+import qualified Network.URI.Encode     as UE
 
 data Config = Config
   { customer :: String
@@ -33,8 +33,8 @@ instance FromJSON Config
 
 requestBearerToken :: S.Session -> Config -> IO String
 requestBearerToken sess cfg = do
-  let opts = defaults & auth ?~ basicAuth (fromString $ apiKey cfg)
-                                          (fromString $ secret cfg)
+  let opts = defaults & auth ?~ basicAuth (fromString $ UE.encode $ apiKey cfg)
+                                          (fromString $ UE.encode $ secret cfg)
   res <- S.postWith opts sess "https://api.sbanken.no/identityserver/connect/token"
     [ "grant_type" := ("client_credentials"::String) ]
   let type' = res ^? responseBody . key "token_type" . _String
@@ -47,9 +47,9 @@ requestBearerToken sess cfg = do
 
 data AccountResult = AccountResult
   {
-    availableItems :: Int
-  , items          :: [Account]
-  , errorType      :: Maybe Text
+    availableItems :: Maybe Int
+  , items          :: Maybe [Account]
+  , errorType      :: Maybe Int
   , isError        :: Bool
   , errorMessage   :: Maybe Text
   , traceId        :: Maybe Text
@@ -59,15 +59,14 @@ instance FromJSON AccountResult
 
 data Account = Account
   {
-    ownerCustomerId :: Text
-  , balance         :: Double -- saldo
-  , customerId      :: Text
-  , name            :: Text
-  , defaultAccount  :: Bool
+    accountId       :: Text
   , accountNumber   :: Text
-  , creditLimit     :: Double
+  , ownerCustomerId :: Text
+  , name            :: Text
   , accountType     :: Text
   , available       :: Double -- disponibelt
+  , balance         :: Double -- saldo
+  , creditLimit     :: Double
   } deriving (Show, Generic)
 
 instance FromJSON Account
@@ -75,8 +74,8 @@ instance FromJSON Account
 getAccounts :: S.Session -> String -> Config -> IO (Maybe AccountResult)
 getAccounts sess token cfg = do
   let opts = defaults & auth ?~ oauth2Bearer (fromString token)
-  res <- S.getWith opts sess $
-    "https://api.sbanken.no/bank/api/v1/Accounts/" ++ customer cfg
+             & header "customerId" .~ [fromString $ customer cfg]
+  res <- S.getWith opts sess "https://api.sbanken.no/bank/api/v1/Accounts/"
   case eitherDecode <$> res ^? responseBody of
     Just (Right parsed) ->
       return parsed
@@ -117,4 +116,6 @@ main = do
   sess <- S.newSession
   token <- requestBearerToken sess cfg
   accs <- getAccounts sess token cfg
-  printBalances $ maybe [] items accs
+  case items <$> accs of
+    Just (Just accs') -> printBalances accs'
+    _ -> putStrLn "No accounts!"
