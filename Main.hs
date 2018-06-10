@@ -102,7 +102,7 @@ printBalances accts = do
 main :: IO ()
 main = do
   cfg <- readConfig
-  sess <- S.newSession
+  sess <- S.newAPISession
   token <- requestBearerToken sess cfg
   accs <- getAccounts sess token cfg
   case AC.items <$> accs of
