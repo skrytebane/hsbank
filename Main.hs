@@ -20,6 +20,8 @@ import qualified Network.Wreq.Session   as S
 import           System.Environment     (getEnv)
 import           System.FilePath        ((</>))
 import qualified Network.URI.Encode     as UE
+import qualified Accounts               as AC
+import qualified Transactions           as TR
 
 data Config = Config
   { customer :: String
@@ -45,33 +47,7 @@ requestBearerToken sess cfg = do
         Nothing -> fail "No bearer token!"
     _ -> fail $ "Expecting bearer token, got " ++ show type'
 
-data AccountResult = AccountResult
-  {
-    availableItems :: Maybe Int
-  , items          :: Maybe [Account]
-  , errorType      :: Maybe Int
-  , isError        :: Bool
-  , errorMessage   :: Maybe Text
-  , traceId        :: Maybe Text
-  } deriving (Show, Generic)
-
-instance FromJSON AccountResult
-
-data Account = Account
-  {
-    accountId       :: Text
-  , accountNumber   :: Text
-  , ownerCustomerId :: Text
-  , name            :: Text
-  , accountType     :: Text
-  , available       :: Double -- disponibelt
-  , balance         :: Double -- saldo
-  , creditLimit     :: Double
-  } deriving (Show, Generic)
-
-instance FromJSON Account
-
-getAccounts :: S.Session -> String -> Config -> IO (Maybe AccountResult)
+getAccounts :: S.Session -> String -> Config -> IO (Maybe AC.AccountResult)
 getAccounts sess token cfg = do
   let opts = defaults & auth ?~ oauth2Bearer (fromString token)
              & header "customerId" .~ [fromString $ customer cfg]
@@ -84,6 +60,17 @@ getAccounts sess token cfg = do
     Nothing ->
       fail "No response body!"
 
+getTransactions :: S.Session -> String -> Config -> Text -> IO (Maybe TR.TransactionResult)
+getTransactions sess token cfg account = do
+  let opts = defaults & auth ?~ oauth2Bearer (fromString token)
+             & header "customerId" .~ [fromString $ customer cfg]
+             & param "length" .~ ["3"]
+  res <- S.getWith opts sess $ "https://api.sbanken.no/bank/api/v1/Transactions/" ++ T.unpack account
+  case eitherDecode <$> res ^? responseBody of
+    Just (Right parsed) -> return parsed
+    Just (Left e) -> fail e
+    Nothing -> fail "No response body!"
+
 readConfig :: IO Config
 readConfig = do
   home <- getEnv "HOME"
@@ -93,7 +80,7 @@ readConfig = do
     Left e    -> fail e
     Right cfg -> return cfg
 
-printBalances :: [Account] -> IO ()
+printBalances :: [AC.Account] -> IO ()
 printBalances accts = do
   printFormat header'
   mapM_ (printFormat . formatBalance) accts
@@ -103,12 +90,14 @@ printBalances accts = do
       right 12 ' ' ("Konto"::Text) <>
       right 22 ' ' ("Kontonamn"::Text) <>
       left 12 ' ' ("Disponibelt"::Text) <>
-      left 12 ' ' ("Saldo"::Text)
+      left 12 ' ' ("Saldo"::Text) <>
+      left 40 ' ' ("ID"::Text)
     formatBalance acct =
-      right 12 ' ' (accountNumber acct) <>
-      right 22 ' ' (name acct) <>
-      left 12 ' ' (fixed 2 $ available acct) <>
-      left 12 ' ' (fixed 2 $ balance acct)
+      right 12 ' ' (AC.accountNumber acct) <>
+      right 22 ' ' (AC.name acct) <>
+      left 12 ' ' (fixed 2 $ AC.available acct) <>
+      left 12 ' ' (fixed 2 $ AC.balance acct) <>
+      left 40 ' ' (AC.accountId acct)
 
 main :: IO ()
 main = do
@@ -116,6 +105,10 @@ main = do
   sess <- S.newSession
   token <- requestBearerToken sess cfg
   accs <- getAccounts sess token cfg
-  case items <$> accs of
-    Just (Just accs') -> printBalances accs'
+  case AC.items <$> accs of
+    Just (Just accs') -> do
+      printBalances accs'
+      let ids = AC.accountId <$> accs'
+      trans <- getTransactions sess token cfg `traverse` ids
+      Prelude.print trans
     _ -> putStrLn "No accounts!"
