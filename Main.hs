@@ -12,7 +12,7 @@ import qualified Data.Text              as T
 import           Data.Text.Format
 import qualified Data.Text.IO           as IO
 import           Data.Text.Lazy         (toStrict)
-import           Data.Text.Lazy.Builder (toLazyText)
+import           Data.Text.Lazy.Builder (toLazyText, singleton)
 import           Data.Time.Clock        (UTCTime)
 import           GHC.Generics
 import           Network.Wreq
@@ -64,7 +64,7 @@ getTransactions :: S.Session -> String -> Config -> Text -> IO (Maybe TR.Transac
 getTransactions sess token cfg account = do
   let opts = defaults & auth ?~ oauth2Bearer (fromString token)
              & header "customerId" .~ [fromString $ customer cfg]
-             & param "length" .~ ["3"]
+             & param "length" .~ ["50"]
   res <- S.getWith opts sess $ "https://api.sbanken.no/bank/api/v1/Transactions/" ++ T.unpack account
   case eitherDecode <$> res ^? responseBody of
     Just (Right parsed) -> return parsed
@@ -80,24 +80,58 @@ readConfig = do
     Left e    -> fail e
     Right cfg -> return cfg
 
-printBalances :: [AC.Account] -> IO ()
-printBalances accts = do
-  printFormat header'
-  mapM_ (printFormat . formatBalance) accts
-  where
-    printFormat = IO.putStrLn . toStrict . toLazyText
+formatBalances :: [AC.Account] -> Text
+formatBalances accts =
+  let header' =
+        right 12  ' ' ("Konto"::Text) <>
+        right 22  ' ' ("Kontonamn"::Text) <>
+        left 12   ' ' ("Disponibelt"::Text) <>
+        left 12   ' ' ("Saldo"::Text) <>
+        singleton ' ' <>
+        singleton '\n'
+      balance' acct =
+        right 12  ' ' (AC.accountNumber acct) <>
+        right 22  ' ' (AC.name acct) <>
+        left 12   ' ' (fixed 2 $ AC.available acct) <>
+        left 12   ' ' (fixed 2 $ AC.balance acct) <>
+        singleton ' ' <>
+        singleton '\n'
+  in
+    toStrict $ toLazyText $ header' <> foldMap balance' accts
+
+formatTransactions :: [TR.Transaction] -> Text
+formatTransactions trans =
+  let
+    stripDate = T.takeWhile (/= 'T')
     header' =
-      right 12 ' ' ("Konto"::Text) <>
-      right 22 ' ' ("Kontonamn"::Text) <>
-      left 12 ' ' ("Disponibelt"::Text) <>
-      left 12 ' ' ("Saldo"::Text) <>
-      left 40 ' ' ("ID"::Text)
-    formatBalance acct =
-      right 12 ' ' (AC.accountNumber acct) <>
-      right 22 ' ' (AC.name acct) <>
-      left 12 ' ' (fixed 2 $ AC.available acct) <>
-      left 12 ' ' (fixed 2 $ AC.balance acct) <>
-      left 40 ' ' (AC.accountId acct)
+      right 10 ' ' ("Dato"::Text) <>
+      left  9  ' ' ("Beløp"::Text) <>
+      singleton ' ' <>
+      right 60  ' ' ("Tekst"::Text) <>
+      right 10  ' ' ("Type"::Text) <>
+      right 10  ' ' ("Reservasjon"::Text) <>
+      singleton '\n'
+    line tr =
+      right 10 ' ' (stripDate $ TR.accountingDate tr) <>
+      left  9 ' ' (fixed 2 $ TR.amount tr) <>
+      singleton ' ' <>
+      right 60 ' ' (TR.text tr) <>
+      right 10 ' ' (TR.transactionType tr) <>
+      right 10 ' ' (case TR.reservationType tr of
+                       Just ttype -> show ttype
+                       _ -> "") <>
+      singleton '\n'
+  in
+    toStrict $ toLazyText $ header' <> foldMap line trans
+
+printTransactions :: (Maybe TR.TransactionResult, Text) -> IO ()
+printTransactions (trans, acc) =
+  case trans of
+    Just (TR.TransactionResult _ (Just items') _ _ _ _) -> do
+      IO.putStrLn $ "* Konto: " <> acc
+      IO.putStrLn $ formatTransactions items'
+    _ ->
+      return ()
 
 main :: IO ()
 main = do
@@ -105,10 +139,14 @@ main = do
   sess <- S.newAPISession
   token <- requestBearerToken sess cfg
   accs <- getAccounts sess token cfg
-  case AC.items <$> accs of
-    Just (Just accs') -> do
-      printBalances accs'
-      let ids = AC.accountId <$> accs'
-      trans <- getTransactions sess token cfg `traverse` ids
-      Prelude.print trans
-    _ -> putStrLn "No accounts!"
+
+  let accounts = case AC.items <$> accs of
+                   Just (Just accs') -> accs'
+                   _ -> []
+
+  case length accs of
+    0 -> return ()
+    _ -> IO.putStrLn $ formatBalances accounts
+
+  transactions <- getTransactions sess token cfg `traverse` (AC.accountId <$> accounts)
+  mapM_ printTransactions $ zip transactions (AC.accountNumber <$> accounts)
