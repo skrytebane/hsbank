@@ -7,6 +7,8 @@ executable          hsbank
     hs-source-dirs: .
     main-is:        Main.hs
     ghc-options:    -Wall -threaded -O2 -rtsopts -with-rtsopts=-N
+    other-modules:  Accounts
+                  , Transactions
     build-depends:  base   >= 4      && < 5
                   , yaml
                   , wreq
