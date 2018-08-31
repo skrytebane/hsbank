@@ -1,0 +1,25 @@
+* hsbank
+
+Just experimenting with the [[https://sbanken.no/][Sbanken]]-API and Haskell.
+
+(This is probably horribly wrong in all sorts of ways.)
+
+** Build
+
+: $ stack build
+
+** Run
+
+1. Put a JSON file with the credentials that you got from Sbanken's
+   API page into a file called ~~/secrets/sbanken.json~:
+
+   #+BEGIN_SRC js
+   {
+     "customer": "12345612345",
+     "apiKey": "fbabd5687897da89798798b789798a",
+     "secret": "ufhiuhiuBJKNuihiu89789-789hfkje=fewewf343MZ",
+     "expires": "2018-01-03T00:00:00.000Z"
+   }
+   #+END_SRC
+
+2. ~$ stack exec hsbank~
