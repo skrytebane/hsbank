@@ -5,6 +5,9 @@ Haskell.
 
 (This is probably horribly wrong in all sorts of ways.)
 
+See the [Sbanken Github page](https://github.com/Sbanken/) for more
+information about their APIs.
+
 ## Build
 
 ``` {.example}
