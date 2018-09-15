@@ -27,7 +27,7 @@ data Config = Config
   { customer :: String
   , apiKey   :: String
   , secret   :: String
-  , expires  :: UTCTime
+  , _expires  :: UTCTime
   }
   deriving (Show, Generic)
 
